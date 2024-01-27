@@ -1,16 +1,22 @@
-// Initialize ASAR support in fs module.
+import cp = require('child_process');
+import fs = require('fs');
+import path = require('path');
+
 import { wrapFsWithAsar } from './asar-fs-wrapper';
-wrapFsWithAsar(require('fs'));
+
+const Module = require('module') as NodeJS.ModuleInternal;
+
+// Initialize ASAR support in fs module.
+wrapFsWithAsar(fs);
 
 // Hook child_process.fork.
-const cp = require('child_process');
 const originalFork = cp.fork;
-cp.fork = (modulePath: string, args: any, options: any) => {
+cp.fork = (modulePath, args?, options?: cp.ForkOptions) => {
   // Parse optional args.
   if (args == null) {
     args = [];
   } else if (typeof args === 'object' && !Array.isArray(args)) {
-    options = args;
+    options = args as cp.ForkOptions;
     args = [];
   }
   // Fallback to original fork to report arg type errors.
@@ -22,7 +28,7 @@ cp.fork = (modulePath: string, args: any, options: any) => {
   // the electron binary run like upstream Node.js.
   options = options ?? {};
   options.env = Object.create(options.env || process.env);
-  options.env.ELECTRON_RUN_AS_NODE = 1;
+  options.env!.ELECTRON_RUN_AS_NODE = '1';
   // On mac the child script runs in helper executable.
   if (!options.execPath && process.platform === 'darwin') {
     options.execPath = process.helperExecPath;
@@ -31,11 +37,9 @@ cp.fork = (modulePath: string, args: any, options: any) => {
 };
 
 // Prevent Node from adding paths outside this app to search paths.
-const path = require('path');
-const Module = require('module') as NodeJS.ModuleInternal;
 const resourcesPathWithTrailingSlash = process.resourcesPath + path.sep;
 const originalNodeModulePaths = Module._nodeModulePaths;
-Module._nodeModulePaths = function (from: string) {
+Module._nodeModulePaths = function (from) {
   const paths: string[] = originalNodeModulePaths(from);
   const fromPath = path.resolve(from) + path.sep;
   // If "from" is outside the app then we do nothing.
